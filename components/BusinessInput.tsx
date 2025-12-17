@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { LoadingSpinner } from './LoadingSpinner';
-import { SparklesIcon } from './icons';
+import { SparklesIcon, LayoutIcon } from './icons';
 
 interface BusinessInputProps {
     onGenerate: (description: string) => void;
@@ -17,37 +17,41 @@ export const BusinessInput: React.FC<BusinessInputProps> = ({ onGenerate, isLoad
     };
 
     return (
-        <section className="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-lg">
-            <form onSubmit={handleSubmit}>
-                <label htmlFor="business-description" className="block text-lg font-semibold mb-2 text-cyan-300">
+        <section className="bg-gray-800/40 rounded-2xl border border-gray-800 shadow-2xl overflow-hidden backdrop-blur-sm">
+            <div className="border-b border-gray-800 px-6 py-4 bg-gray-800/20">
+                <h3 className="text-lg font-bold flex items-center gap-3 text-white">
+                    <span className="text-cyan-500 bg-cyan-500/10 p-2 rounded-lg"><LayoutIcon className="w-5 h-5" /></span>
                     Describe tu Negocio
-                </label>
-                <p className="text-gray-400 mb-4 text-sm">
-                    Proporciona una descripción detallada de tu negocio y los procesos que te gustaría automatizar. Cuanto más detalle, mejor será el plan.
+                </h3>
+            </div>
+            
+            <form onSubmit={handleSubmit} className="p-8">
+                <p className="text-gray-400 mb-6 text-sm leading-relaxed">
+                    Nuestra IA analizará tu modelo operativo para identificar ineficiencias y diseñar una infraestructura de agentes autónomos a medida.
                 </p>
                 <textarea
                     id="business-description"
-                    className="w-full h-40 bg-gray-900/50 border border-gray-600 rounded-lg p-4 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-colors duration-200 resize-none text-gray-200"
+                    className="w-full h-44 bg-gray-950/50 border border-gray-800 rounded-xl p-5 focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500 transition-all duration-300 resize-none text-gray-200 placeholder-gray-600 outline-none"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Ej. Una tienda de e-commerce que vende artesanías..."
+                    placeholder="Describe los procesos críticos de tu empresa..."
                     disabled={isLoading}
                 />
-                <div className="mt-4 flex justify-end">
+                <div className="mt-6 flex justify-end">
                     <button
                         type="submit"
                         disabled={isLoading}
-                        className="flex items-center justify-center px-6 py-3 bg-cyan-600 text-white font-semibold rounded-lg hover:bg-cyan-500 disabled:bg-gray-600 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105 disabled:scale-100 shadow-md"
+                        className="group flex items-center justify-center px-8 py-3.5 bg-cyan-600 text-white font-bold rounded-xl hover:bg-cyan-500 disabled:bg-gray-800 disabled:text-gray-600 disabled:border-gray-700 border border-cyan-500/50 transition-all duration-300 shadow-[0_0_20px_rgba(8,145,178,0.2)] hover:shadow-[0_0_25px_rgba(8,145,178,0.4)]"
                     >
                         {isLoading ? (
                             <>
                                 <LoadingSpinner />
-                                Generando...
+                                <span className="animate-pulse">Analizando...</span>
                             </>
                         ) : (
                             <>
-                                <SparklesIcon className="w-5 h-5 mr-2" />
-                                Generar Plan de Automatización
+                                <SparklesIcon className="w-5 h-5 mr-2 group-hover:rotate-12 transition-transform" />
+                                Generar Arquitectura
                             </>
                         )}
                     </button>
