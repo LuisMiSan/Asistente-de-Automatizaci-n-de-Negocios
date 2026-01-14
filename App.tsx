@@ -5,6 +5,7 @@ import { BusinessInput } from './components/BusinessInput';
 import { AutomationPlan } from './components/AutomationPlan';
 import { AdminPanel } from './components/AdminPanel';
 import { ChatBot } from './components/ChatBot';
+import { SaveModal } from './components/SaveModal';
 import { generateAutomationPlan } from './services/geminiService';
 import type { Plan, GroundingSource, SavedPlan, PlanSection } from './types';
 
@@ -19,6 +20,10 @@ const App: React.FC = () => {
     const [history, setHistory] = useState<SavedPlan[]>([]);
     const [currentDescription, setCurrentDescription] = useState<string>('');
     const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+    
+    // UI States
+    const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+    const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
 
     const sectionsRefs = {
         input: useRef<HTMLDivElement>(null),
@@ -30,7 +35,6 @@ const App: React.FC = () => {
         sources: useRef<HTMLDivElement>(null),
     };
 
-    // Cargar historial al iniciar
     useEffect(() => {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
@@ -42,13 +46,24 @@ const App: React.FC = () => {
         }
     }, []);
 
+    useEffect(() => {
+        if (notification) {
+            const timer = setTimeout(() => setNotification(null), 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [notification]);
+
+    const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+        setNotification({ message, type });
+    };
+
     const saveToStorage = (newHistory: SavedPlan[]) => {
         try {
             setHistory(newHistory);
             localStorage.setItem(STORAGE_KEY, JSON.stringify(newHistory));
         } catch (e) {
             console.error("Error saving to localStorage", e);
-            alert("Error al guardar en el almacenamiento local (posiblemente lleno).");
+            showNotification("Error: Almacenamiento lleno", 'error');
         }
     };
 
@@ -60,7 +75,7 @@ const App: React.FC = () => {
         setAutomationPlan(null);
         setGroundingSources([]);
         setCurrentDescription('');
-        setCurrentProjectId(null); // Reset ID to create new
+        setCurrentProjectId(null);
         scrollToSection('input');
     };
 
@@ -68,7 +83,7 @@ const App: React.FC = () => {
         setAutomationPlan(savedPlan.plan);
         setGroundingSources(savedPlan.sources);
         setCurrentDescription(savedPlan.businessDescription);
-        setCurrentProjectId(savedPlan.id); // Set active ID
+        setCurrentProjectId(savedPlan.id);
         setTimeout(() => scrollToSection('analysis'), 100);
     };
 
@@ -79,49 +94,60 @@ const App: React.FC = () => {
             if (currentProjectId === id) {
                 handleNewAudit();
             }
+            showNotification("Proyecto eliminado");
         }
     };
 
-    const handleSaveProject = () => {
+    // Este handler es llamado por el botón "Guardar"
+    const handleSaveButtonClick = () => {
         if (!automationPlan) return;
 
         if (currentProjectId) {
-            // ACTUALIZAR PROYECTO EXISTENTE
-            const updatedHistory = history.map(p => {
-                if (p.id === currentProjectId) {
-                    return {
-                        ...p,
-                        timestamp: Date.now(),
-                        businessDescription: currentDescription,
-                        plan: automationPlan,
-                        sources: groundingSources
-                    };
-                }
-                return p;
-            });
-            saveToStorage(updatedHistory);
-            alert("Proyecto actualizado correctamente en la Base de Datos.");
+            // Si ya existe ID, actualizamos directamente sin pedir nombre
+            updateExistingProject();
         } else {
-            // GUARDAR NUEVO PROYECTO
-            let name = prompt("Asigna un nombre para guardar este proyecto:", "Nueva Auditoría");
-            if (name === null) return; // User cancelled
-            if (!name.trim()) name = "Sin Nombre";
-
-            const newId = Date.now().toString();
-            const savedItem: SavedPlan = {
-                id: newId,
-                name: name,
-                timestamp: Date.now(),
-                businessDescription: currentDescription,
-                plan: automationPlan,
-                sources: groundingSources
-            };
-
-            const updatedHistory = [savedItem, ...history];
-            saveToStorage(updatedHistory);
-            setCurrentProjectId(newId); // Switch to active mode
-            alert("Proyecto nuevo guardado exitosamente.");
+            // Si es nuevo, abrimos modal para pedir nombre
+            setIsSaveModalOpen(true);
         }
+    };
+
+    const updateExistingProject = () => {
+        if (!currentProjectId || !automationPlan) return;
+
+        const updatedHistory = history.map(p => {
+            if (p.id === currentProjectId) {
+                return {
+                    ...p,
+                    timestamp: Date.now(),
+                    businessDescription: currentDescription,
+                    plan: automationPlan,
+                    sources: groundingSources
+                };
+            }
+            return p;
+        });
+        saveToStorage(updatedHistory);
+        showNotification("Proyecto actualizado correctamente");
+    };
+
+    const handleSaveNewProject = (name: string) => {
+        if (!automationPlan) return;
+
+        const newId = Date.now().toString();
+        const savedItem: SavedPlan = {
+            id: newId,
+            name: name,
+            timestamp: Date.now(),
+            businessDescription: currentDescription,
+            plan: automationPlan,
+            sources: groundingSources
+        };
+
+        const updatedHistory = [savedItem, ...history];
+        saveToStorage(updatedHistory);
+        setCurrentProjectId(newId);
+        setIsSaveModalOpen(false);
+        showNotification("Nuevo proyecto guardado en Base de Datos");
     };
 
     const handleUpdatePlanSection = (sectionKey: keyof Plan, newContent: string) => {
@@ -146,17 +172,16 @@ const App: React.FC = () => {
                     throw new Error("Formato de archivo inválido");
                 }
 
-                // Generar nuevo ID para evitar colisiones al importar
                 importedPlan.id = Date.now().toString() + Math.random().toString().slice(2, 5);
                 importedPlan.name = importedPlan.name + " (Importado)";
 
                 const updatedHistory = [importedPlan, ...history];
                 saveToStorage(updatedHistory);
                 loadFromHistory(importedPlan);
-                alert("Proyecto importado correctamente.");
+                showNotification("Proyecto importado correctamente");
             } catch (err) {
                 console.error("Error importing file:", err);
-                alert("Error al importar el archivo.");
+                showNotification("Error al importar el archivo", 'error');
             }
         };
         reader.readAsText(file);
@@ -169,10 +194,6 @@ const App: React.FC = () => {
         }
         setIsLoading(true);
         setError(null);
-        // No borramos currentProjectId aquí para permitir "regenerar" sobre el mismo proyecto si se desea,
-        // pero lo más limpio es tratar una generación como un borrador hasta que se guarda.
-        // Mantenemos el ID si existe, asumiendo que el usuario quiere actualizar la versión actual.
-        
         setAutomationPlan(null);
         setGroundingSources([]);
         setCurrentDescription(businessDescription);
@@ -205,6 +226,26 @@ const App: React.FC = () => {
     return (
         <div className="h-screen bg-gray-950 text-gray-100 font-sans flex flex-col overflow-hidden">
             <Header onToggleAdmin={() => setIsAdminOpen(!isAdminOpen)} isAdminOpen={isAdminOpen} />
+            
+            {/* Notifications */}
+            <div className={`fixed top-20 right-1/2 translate-x-1/2 z-50 transition-all duration-300 transform ${notification ? 'translate-y-0 opacity-100' : '-translate-y-10 opacity-0 pointer-events-none'}`}>
+                {notification && (
+                    <div className={`px-6 py-3 rounded-full shadow-2xl border flex items-center gap-3 backdrop-blur-md ${
+                        notification.type === 'success' 
+                        ? 'bg-green-500/10 border-green-500/50 text-green-400' 
+                        : 'bg-red-500/10 border-red-500/50 text-red-400'
+                    }`}>
+                        <div className={`w-2 h-2 rounded-full ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                        <span className="font-semibold text-sm">{notification.message}</span>
+                    </div>
+                )}
+            </div>
+
+            <SaveModal 
+                isOpen={isSaveModalOpen} 
+                onClose={() => setIsSaveModalOpen(false)} 
+                onSave={handleSaveNewProject} 
+            />
             
             <div className="flex flex-1 overflow-hidden relative">
                 <AdminPanel 
@@ -239,7 +280,7 @@ const App: React.FC = () => {
                         sources={groundingSources}
                         isLoading={isLoading}
                         refs={sectionsRefs}
-                        onSaveProject={handleSaveProject}
+                        onSaveProject={handleSaveButtonClick}
                         currentProjectId={currentProjectId}
                         onUpdateSection={handleUpdatePlanSection}
                     />
