@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import type { Plan, GroundingSource } from '../types';
 import { LoadingSpinner } from './LoadingSpinner';
 import { 
@@ -9,7 +9,10 @@ import {
     RocketIcon, 
     StatsIcon, 
     SearchIcon,
-    DocumentArrowDownIcon 
+    DocumentArrowDownIcon,
+    FloppyIcon,
+    PencilIcon,
+    CheckIcon
 } from './icons';
 import { jsPDF } from 'jspdf';
 
@@ -18,6 +21,9 @@ interface AutomationPlanProps {
     sources: GroundingSource[];
     isLoading: boolean;
     refs: any;
+    onSaveProject: () => void;
+    currentProjectId: string | null;
+    onUpdateSection: (sectionKey: keyof Plan, newContent: string) => void;
 }
 
 const Card: React.FC<{ 
@@ -26,18 +32,57 @@ const Card: React.FC<{
     icon: React.ReactNode; 
     isLoading: boolean;
     idRef: React.RefObject<HTMLDivElement | null>;
-}> = ({ title, content, icon, isLoading, idRef }) => {
+    onSaveContent: (newContent: string) => void;
+}> = ({ title, content, icon, isLoading, idRef, onSaveContent }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [editedContent, setEditedContent] = useState(content);
+
+    // Sincronizar contenido si cambia externamente (ej: regeneración)
+    React.useEffect(() => {
+        setEditedContent(content);
+    }, [content]);
+
+    const handleSave = () => {
+        onSaveContent(editedContent);
+        setIsEditing(false);
+    };
+
     return (
-        <div ref={idRef} className="bg-gray-800/40 rounded-2xl border border-gray-800 shadow-xl overflow-hidden backdrop-blur-sm">
+        <div ref={idRef} className="bg-gray-800/40 rounded-2xl border border-gray-800 shadow-xl overflow-hidden backdrop-blur-sm group hover:border-gray-700 transition-colors">
             <div className="border-b border-gray-800 px-6 py-4 flex items-center justify-between bg-gray-800/20">
                 <h3 className="text-lg font-bold flex items-center gap-3 text-white">
                     <span className="text-cyan-500 bg-cyan-500/10 p-2 rounded-lg">{icon}</span>
                     {title}
                 </h3>
-                {isLoading && <LoadingSpinner />}
+                <div className="flex items-center gap-2">
+                    {isLoading && <LoadingSpinner />}
+                    {!isLoading && content && (
+                        <button
+                            onClick={() => isEditing ? handleSave() : setIsEditing(true)}
+                            className={`p-2 rounded-lg transition-all ${
+                                isEditing 
+                                ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30' 
+                                : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'
+                            }`}
+                            title={isEditing ? "Guardar cambios" : "Remodelar / Editar"}
+                        >
+                            {isEditing ? <CheckIcon className="w-4 h-4" /> : <PencilIcon className="w-4 h-4" />}
+                        </button>
+                    )}
+                </div>
             </div>
             <div className="p-8">
-                {content ? (
+                {isLoading && !content ? (
+                     <div className="py-12 flex flex-col items-center justify-center text-gray-600 border-2 border-dashed border-gray-800 rounded-xl">
+                        <p className="text-sm italic">Pendiente de generación...</p>
+                    </div>
+                ) : isEditing ? (
+                    <textarea
+                        value={editedContent}
+                        onChange={(e) => setEditedContent(e.target.value)}
+                        className="w-full h-96 bg-gray-900/50 border border-gray-700 rounded-xl p-4 text-gray-300 font-mono text-sm leading-relaxed focus:ring-2 focus:ring-cyan-500/30 outline-none resize-y"
+                    />
+                ) : content ? (
                     <div className="prose prose-invert max-w-none prose-p:text-gray-400 prose-p:leading-relaxed prose-li:text-gray-400 prose-strong:text-cyan-400">
                         {content.split('\n').map((paragraph, index) => {
                             if (paragraph.startsWith('- ') || paragraph.startsWith('* ')) {
@@ -55,7 +100,7 @@ const Card: React.FC<{
                     </div>
                 ) : (
                     <div className="py-12 flex flex-col items-center justify-center text-gray-600 border-2 border-dashed border-gray-800 rounded-xl">
-                        <p className="text-sm italic">Pendiente de generación...</p>
+                        <p className="text-sm italic">Esperando datos...</p>
                     </div>
                 )}
             </div>
@@ -63,7 +108,15 @@ const Card: React.FC<{
     );
 };
 
-export const AutomationPlan: React.FC<AutomationPlanProps> = ({ plan, sources, isLoading, refs }) => {
+export const AutomationPlan: React.FC<AutomationPlanProps> = ({ 
+    plan, 
+    sources, 
+    isLoading, 
+    refs, 
+    onSaveProject, 
+    currentProjectId,
+    onUpdateSection 
+}) => {
     const handleExportPDF = () => {
         if (!plan) return;
         const doc = new jsPDF();
@@ -73,7 +126,7 @@ export const AutomationPlan: React.FC<AutomationPlanProps> = ({ plan, sources, i
         const maxLineWidth = pageWidth - (leftMargin * 2);
 
         doc.setFontSize(22);
-        doc.text("Plan de Automatización de Negocios", leftMargin, y);
+        doc.text("Plan de Automatización", leftMargin, y);
         y += 15;
 
         const sections = [plan.analysis, plan.flows, plan.stack, plan.implementation, plan.roi];
@@ -99,19 +152,36 @@ export const AutomationPlan: React.FC<AutomationPlanProps> = ({ plan, sources, i
 
     return (
         <div className="space-y-12">
-            <div className="flex flex-col sm:flex-row justify-between items-center bg-gray-900/50 p-6 rounded-2xl border border-gray-800 gap-4">
+            <div className="flex flex-col sm:flex-row justify-between items-center bg-gray-900/50 p-6 rounded-2xl border border-gray-800 gap-4 sticky top-16 z-10 backdrop-blur-md shadow-lg">
                 <div>
-                    <h2 className="text-2xl font-bold text-white">Resultados de Auditoría</h2>
-                    <p className="text-gray-500 text-sm">Visualización en tiempo real de tu estrategia de automatización.</p>
+                    <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                        Resultados de Auditoría
+                        {currentProjectId && <span className="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded-full border border-green-500/30">Modo Edición</span>}
+                    </h2>
+                    <p className="text-gray-500 text-sm">Visualiza, remodela y exporta tu estrategia.</p>
                 </div>
-                <button 
-                    onClick={handleExportPDF}
-                    disabled={!plan}
-                    className="flex items-center px-5 py-2.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition-all border border-gray-700 shadow-lg text-sm font-semibold"
-                >
-                    <DocumentArrowDownIcon className="w-5 h-5 mr-2 text-cyan-400" />
-                    Exportar Reporte
-                </button>
+                <div className="flex gap-3">
+                    <button 
+                        onClick={onSaveProject}
+                        disabled={!plan}
+                        className={`flex items-center px-5 py-2.5 rounded-xl transition-all border text-sm font-bold shadow-lg ${
+                            currentProjectId 
+                            ? 'bg-green-600 hover:bg-green-500 text-white border-green-500' 
+                            : 'bg-cyan-600 hover:bg-cyan-500 text-white border-cyan-500'
+                        } disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-800 disabled:border-gray-700 disabled:text-gray-500`}
+                    >
+                        <FloppyIcon className="w-5 h-5 mr-2" />
+                        {currentProjectId ? 'Actualizar Proyecto' : 'Guardar Proyecto'}
+                    </button>
+                    <button 
+                        onClick={handleExportPDF}
+                        disabled={!plan}
+                        className="flex items-center px-5 py-2.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition-all border border-gray-700 shadow-lg text-sm font-semibold"
+                    >
+                        <DocumentArrowDownIcon className="w-5 h-5 mr-2 text-gray-400" />
+                        Exportar PDF
+                    </button>
+                </div>
             </div>
             
             <Card 
@@ -120,6 +190,7 @@ export const AutomationPlan: React.FC<AutomationPlanProps> = ({ plan, sources, i
                 content={plan?.analysis.content || ''} 
                 icon={<AnalysisIcon />} 
                 isLoading={isLoading && !plan}
+                onSaveContent={(c) => onUpdateSection('analysis', c)}
             />
             
             <Card 
@@ -128,6 +199,7 @@ export const AutomationPlan: React.FC<AutomationPlanProps> = ({ plan, sources, i
                 content={plan?.flows.content || ''} 
                 icon={<FlowIcon />} 
                 isLoading={isLoading && !plan}
+                onSaveContent={(c) => onUpdateSection('flows', c)}
             />
 
             <Card 
@@ -136,6 +208,7 @@ export const AutomationPlan: React.FC<AutomationPlanProps> = ({ plan, sources, i
                 content={plan?.stack.content || ''} 
                 icon={<StackIcon />} 
                 isLoading={isLoading && !plan}
+                onSaveContent={(c) => onUpdateSection('stack', c)}
             />
 
             <Card 
@@ -144,6 +217,7 @@ export const AutomationPlan: React.FC<AutomationPlanProps> = ({ plan, sources, i
                 content={plan?.implementation.content || ''} 
                 icon={<RocketIcon />} 
                 isLoading={isLoading && !plan}
+                onSaveContent={(c) => onUpdateSection('implementation', c)}
             />
 
             <Card 
@@ -152,6 +226,7 @@ export const AutomationPlan: React.FC<AutomationPlanProps> = ({ plan, sources, i
                 content={plan?.roi.content || ''} 
                 icon={<StatsIcon />} 
                 isLoading={isLoading && !plan}
+                onSaveContent={(c) => onUpdateSection('roi', c)}
             />
 
             <div ref={refs.sources} className="bg-gray-800/40 rounded-2xl border border-gray-800 shadow-xl overflow-hidden backdrop-blur-sm">

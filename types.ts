@@ -14,6 +14,7 @@ export interface Plan {
 
 export interface SavedPlan {
     id: string;
+    name: string;
     timestamp: number;
     businessDescription: string;
     plan: Plan;
