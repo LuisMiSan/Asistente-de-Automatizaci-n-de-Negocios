@@ -8,6 +8,7 @@ import { ChatBot } from './components/ChatBot';
 import { SaveModal } from './components/SaveModal';
 import { generateAutomationPlan } from './services/geminiService';
 import type { Plan, GroundingSource, SavedPlan, PlanSection } from './types';
+import { jsPDF } from 'jspdf';
 
 const STORAGE_KEY = 'automation_hub_database_v2';
 
@@ -98,15 +99,11 @@ const App: React.FC = () => {
         }
     };
 
-    // Este handler es llamado por el botón "Guardar"
     const handleSaveButtonClick = () => {
         if (!automationPlan) return;
-
         if (currentProjectId) {
-            // Si ya existe ID, actualizamos directamente sin pedir nombre
             updateExistingProject();
         } else {
-            // Si es nuevo, abrimos modal para pedir nombre
             setIsSaveModalOpen(true);
         }
     };
@@ -161,6 +158,44 @@ const App: React.FC = () => {
         });
     };
 
+    const handleExportPDF = () => {
+        if (!automationPlan) return;
+        const doc = new jsPDF();
+        let y = 20;
+        const leftMargin = 20;
+        const pageWidth = doc.internal.pageSize.width;
+        const maxLineWidth = pageWidth - (leftMargin * 2);
+
+        doc.setFontSize(22);
+        doc.text("Plan de Automatización", leftMargin, y);
+        y += 10;
+        
+        doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
+        doc.text(`Generado para: ${currentDescription.substring(0, 50)}...`, leftMargin, y);
+        y += 15;
+
+        const sections = [automationPlan.analysis, automationPlan.flows, automationPlan.stack, automationPlan.implementation, automationPlan.roi];
+        sections.forEach(section => {
+            if (!section.title || !section.content) return;
+            doc.setFontSize(16);
+            doc.setTextColor(0, 100, 160);
+            doc.text(section.title, leftMargin, y);
+            y += 10;
+            doc.setFontSize(11);
+            doc.setTextColor(20, 20, 20);
+            const lines = doc.splitTextToSize(section.content, maxLineWidth);
+            lines.forEach((line: string) => {
+                if (y > 280) { doc.addPage(); y = 20; }
+                doc.text(line, leftMargin, y);
+                y += 6;
+            });
+            y += 10;
+        });
+
+        doc.save("plan_automatizacion.pdf");
+    };
+
     const handleImportProject = (file: File) => {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -200,20 +235,18 @@ const App: React.FC = () => {
 
         try {
             const result = await generateAutomationPlan(businessDescription);
-            
-            const sections = result.planText.split(/### \d+\.\s+.*?\n/);
-            const contentSections = sections.filter(s => s.trim().length > 0);
+            const { planData, sources } = result;
 
             const newPlan: Plan = {
-                analysis: { title: '1. Análisis de Procesos Manuales', content: contentSections[0] || '' },
-                flows: { title: '2. Diseño de Flujos de Agentes', content: contentSections[1] || '' },
-                stack: { title: '3. Stack Tecnológico Recomendado', content: contentSections[2] || '' },
-                implementation: { title: '4. Implementación Paso a Paso', content: contentSections[3] || '' },
-                roi: { title: '5. ROI Estimado', content: contentSections[4] || '' },
+                analysis: { title: '1. Análisis de Procesos Manuales', content: planData.analysis || '' },
+                flows: { title: '2. Diseño de Flujos de Agentes', content: planData.flows || '' },
+                stack: { title: '3. Stack Tecnológico Recomendado', content: planData.stack || '' },
+                implementation: { title: '4. Implementación Paso a Paso', content: planData.implementation || '' },
+                roi: { title: '5. ROI Estimado', content: planData.roi || '' },
             };
 
             setAutomationPlan(newPlan);
-            setGroundingSources(result.sources);
+            setGroundingSources(sources);
             
         } catch (err) {
             console.error("Error generating plan:", err);
@@ -225,7 +258,14 @@ const App: React.FC = () => {
 
     return (
         <div className="h-screen bg-gray-950 text-gray-100 font-sans flex flex-col overflow-hidden">
-            <Header onToggleAdmin={() => setIsAdminOpen(!isAdminOpen)} isAdminOpen={isAdminOpen} />
+            <Header 
+                onToggleAdmin={() => setIsAdminOpen(!isAdminOpen)} 
+                isAdminOpen={isAdminOpen} 
+                hasPlan={!!automationPlan}
+                onSaveProject={handleSaveButtonClick}
+                onExportPDF={handleExportPDF}
+                currentProjectId={currentProjectId}
+            />
             
             {/* Notifications */}
             <div className={`fixed top-20 right-1/2 translate-x-1/2 z-50 transition-all duration-300 transform ${notification ? 'translate-y-0 opacity-100' : '-translate-y-10 opacity-0 pointer-events-none'}`}>
@@ -260,29 +300,30 @@ const App: React.FC = () => {
                     currentProjectId={currentProjectId}
                 />
                 
-                <main className="flex-1 overflow-y-auto bg-gray-900/30 p-4 md:p-8 space-y-12 pb-32 custom-scrollbar">
-                    <div ref={sectionsRefs.input}>
-                        <BusinessInput 
-                            onGenerate={handleGeneratePlan} 
-                            isLoading={isLoading} 
-                            initialValue={currentDescription}
-                        />
-                    </div>
-
-                    {error && (
-                        <div className="bg-red-900/30 border border-red-800 text-red-200 px-6 py-4 rounded-xl text-center backdrop-blur-md">
-                            {error}
+                <main className="flex-1 overflow-y-auto bg-gray-900/30 pb-32 custom-scrollbar relative">
+                    <div className="p-4 md:p-8 space-y-8 max-w-7xl mx-auto">
+                        <div ref={sectionsRefs.input}>
+                            <BusinessInput 
+                                onGenerate={handleGeneratePlan} 
+                                isLoading={isLoading} 
+                                initialValue={currentDescription}
+                            />
                         </div>
-                    )}
+
+                        {error && (
+                            <div className="bg-red-900/30 border border-red-800 text-red-200 px-6 py-4 rounded-xl text-center backdrop-blur-md">
+                                {error}
+                            </div>
+                        )}
+                    </div>
 
                     <AutomationPlan 
                         plan={automationPlan}
                         sources={groundingSources}
                         isLoading={isLoading}
                         refs={sectionsRefs}
-                        onSaveProject={handleSaveButtonClick}
-                        currentProjectId={currentProjectId}
                         onUpdateSection={handleUpdatePlanSection}
+                        businessDescription={currentDescription}
                     />
                 </main>
             </div>
