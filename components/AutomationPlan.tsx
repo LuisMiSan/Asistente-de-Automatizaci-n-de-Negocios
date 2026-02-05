@@ -126,6 +126,20 @@ export const AutomationPlan: React.FC<AutomationPlanProps> = ({
     onUpdateSection,
     businessDescription
 }) => {
+    const sanitizeUrl = (url: string | undefined | null): string | null => {
+        if (!url || typeof url !== 'string') return null;
+        try {
+            const parsed = new URL(url, window.location.origin);
+            const protocol = parsed.protocol.toLowerCase();
+            if (protocol === 'http:' || protocol === 'https:') {
+                return parsed.toString();
+            }
+            return null;
+        } catch {
+            return null;
+        }
+    };
+
     return (
         <div className="flex flex-col">
             <div className="p-4 md:p-8 space-y-12 max-w-7xl mx-auto w-full">
@@ -196,19 +210,30 @@ export const AutomationPlan: React.FC<AutomationPlanProps> = ({
                     <div className="p-8">
                         {sources.length > 0 ? (
                             <ul className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {sources.map((source, index) => (
-                                    <li key={index} className="flex">
-                                        <a 
-                                            href={source.uri} 
-                                            target="_blank" 
-                                            rel="noopener noreferrer" 
-                                            className="flex-1 p-4 bg-gray-900/50 border border-gray-800 rounded-xl hover:border-cyan-500/50 hover:bg-gray-800 transition-all group"
-                                        >
-                                            <p className="text-cyan-400 font-medium text-sm mb-1 group-hover:underline truncate">{source.title}</p>
-                                            <p className="text-gray-500 text-xs truncate">{source.uri}</p>
-                                        </a>
-                                    </li>
-                                ))}
+                                {sources.map((source, index) => {
+                                    const safeHref = sanitizeUrl(source.uri);
+                                    const displayUri = safeHref || source.uri || '';
+                                    return (
+                                        <li key={index} className="flex">
+                                            {safeHref ? (
+                                                <a 
+                                                    href={safeHref} 
+                                                    target="_blank" 
+                                                    rel="noopener noreferrer" 
+                                                    className="flex-1 p-4 bg-gray-900/50 border border-gray-800 rounded-xl hover:border-cyan-500/50 hover:bg-gray-800 transition-all group"
+                                                >
+                                                    <p className="text-cyan-400 font-medium text-sm mb-1 group-hover:underline truncate">{source.title}</p>
+                                                    <p className="text-gray-500 text-xs truncate">{displayUri}</p>
+                                                </a>
+                                            ) : (
+                                                <div className="flex-1 p-4 bg-gray-900/50 border border-gray-800 rounded-xl text-gray-500 text-xs">
+                                                    <p className="text-cyan-400 font-medium text-sm mb-1 truncate">{source.title}</p>
+                                                    <p className="truncate">URL inválida o no segura</p>
+                                                </div>
+                                            )}
+                                        </li>
+                                    );
+                                })}
                             </ul>
                         ) : (
                             <div className="py-12 flex flex-col items-center justify-center text-gray-600 border-2 border-dashed border-gray-800 rounded-xl">
